@@ -8,11 +8,7 @@
 export default defineNuxtConfig({
   preset: 'node-server',
 
-  modules: [
-    '@nuxtjs/tailwindcss',
-    'nuxt-headlessui',
-    'nuxt-gtag',
-  ],
+  modules: ['@nuxtjs/tailwindcss', 'nuxt-headlessui', 'nuxt-gtag', '@nuxtjs/leaflet'],
 
   gtag: {
     id: 'G-M1KERXTK1H', // TODO: Add your google analytics 4 tag here
@@ -59,6 +55,10 @@ export default defineNuxtConfig({
     prefix: 'Headless',
   },
 
+  css: [
+    'leaflet/dist/leaflet.css',
+  ],
+
   build: {
     extend (config, ctx) {
       config.resolve.symlinks = false;
@@ -82,4 +82,6 @@ export default defineNuxtConfig({
   devtools: {
     enabled: true,
   },
+
+  compatibilityDate: '2025-01-17',
 });
