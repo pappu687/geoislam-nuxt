@@ -84,4 +84,12 @@ export default defineNuxtConfig({
   },
 
   compatibilityDate: '2025-01-17',
+  router: {
+    extendRoutes (routes, resolve) {
+      routes.push({
+        path: '/',
+        redirect: '/map',
+      });
+    },
+  },
 });
