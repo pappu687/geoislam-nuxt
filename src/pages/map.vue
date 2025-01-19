@@ -34,8 +34,8 @@
       :class="{'translate-x-0': isSidebarOpen, 'translate-x-full': !isSidebarOpen}"
     >
       <!-- Sidebar Header -->
-      <div class="flex items-center justify-between border-b border-gray-200 p-3">
-        <h2 class="text-lg font-semibold">Detail</h2>
+      <div class="flex items-center justify-between border-b border-gray-200 px-5 py-1 pr-2">
+        <h2 class="text-lg font-semibold">{{ selectedFeature?.properties.name }}</h2>
         <button
           @click="closeSidebar"
           class="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
@@ -56,12 +56,51 @@
         </button>
       </div>
 
-      <!-- Sidebar Content -->
+      <!-- Tabs Navigation -->
+      <div class="border-b border-gray-200">
+        <nav class="flex -mb-px">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            @click="currentTab = tab.id"
+            class="flex-1 px-4 py-2 text-sm font-medium text-center"
+            :class="{
+              'border-b-2 border-blue-500 text-blue-600': currentTab === tab.id,
+              'text-gray-500 hover:text-gray-700': currentTab !== tab.id
+            }"
+          >
+            {{ tab.name }}
+          </button>
+        </nav>
+      </div>
+
+      <!-- Tab Content -->
       <div class="p-4 overflow-y-auto">
-        <div v-if="selectedFeature">
-          <pre class="whitespace-pre-wrap text-xs">{{ JSON.stringify(selectedFeature, null, 2) }}</pre>
+        <!-- Info Tab -->
+        <div v-if="currentTab === 'info' && selectedFeature" class="space-y-4">
+          <div v-for="(value, key) in selectedFeature.properties" :key="key" class="border-b pb-2">
+            <h3 class="text-sm font-medium text-gray-500 capitalize">{{ key }}</h3>
+            <p class="mt-1 text-gray-900">{{ value || 'N/A' }}</p>
+          </div>
         </div>
-        <div v-else class="text-gray-500">
+
+        <!-- References Tab -->
+        <div v-if="currentTab === 'references'" class="space-y-4">
+          <p class="text-gray-500">References content goes here</p>
+        </div>
+
+        <!-- Media Tab -->
+        <div v-if="currentTab === 'media'" class="space-y-4">
+          <p class="text-gray-500">Media content goes here</p>
+        </div>
+
+        <!-- Comments Tab -->
+        <div v-if="currentTab === 'comments'" class="space-y-4">
+          <p class="text-gray-500">Comments content goes here</p>
+        </div>
+
+        <!-- No Feature Selected Message -->
+        <div v-if="!selectedFeature" class="text-gray-500">
           Select a feature to view details
         </div>
       </div>
@@ -80,6 +119,14 @@ const geoJsonRef = ref(null);
 const isSidebarOpen = ref(false);
 const selectedFeature = ref(null);
 
+const currentTab = ref('info');
+const tabs = [
+  { id: 'info', name: 'Info' },
+  { id: 'references', name: 'References' },
+  { id: 'media', name: 'Media' },
+  { id: 'comments', name: 'Comments' },
+];
+
 // Define GeoJSON options
 const geoJsonOptions = {
   style: (feature) => ({
@@ -92,7 +139,6 @@ const geoJsonOptions = {
   }),
   onEachFeature: (feature, layer) => {
     layer.on('click', (e) => {
-      console.log('Feature clicked:', feature);
       selectedFeature.value = feature;
       isSidebarOpen.value = true;
       e.originalEvent.stopPropagation();
