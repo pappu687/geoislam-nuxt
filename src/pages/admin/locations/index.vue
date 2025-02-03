@@ -46,7 +46,7 @@
                   {{ formatCoordinates(location.geometry.coordinates) }}
                 </td>
                 <td class="px-6 py-4">
-                  <NuxtLink :to="'/admin/locations/' + location.id" class="text-indigo-600 hover:text-indigo-900 mr-4">
+                  <NuxtLink :to="'/admin/locations/' + location.properties.id" class="text-indigo-600 hover:text-indigo-900 mr-4">
                     Edit
                   </NuxtLink>
                   <button @click="deleteLocation(location.id)" class="text-red-600 hover:text-red-900">
