@@ -5,7 +5,7 @@
         <h2
           class="text-2xl font-bold leading-7 text-gray-900 sm:truncate sm:text-3xl sm:tracking-tight"
         >
-          Edit Location
+          Add / Edit Location
         </h2>
       </div>
     </div>
@@ -65,6 +65,33 @@
                     rows="3"
                     class="w-full bg-white rounded border border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 h-32 text-base outline-none text-gray-700 py-1 px-3 resize-none leading-6 transition-colors duration-200 ease-in-out"
                   />
+                </div>
+              </div>
+
+              <div class="sm:col-span-6">
+                <label class="block text-sm font-medium text-gray-700">Map Location</label>
+                <div class="mt-1 h-[400px] relative">
+                  <client-only>
+                    <div v-if="isClient">
+                      <LMap
+                        v-model:zoom="zoom"
+                        :center="mapCenter"
+                        @ready="handleMapReady"
+                        class="h-[400px] w-full z-0"
+                      >
+                        <LTileLayer
+                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                          layer-type="base"
+                          name="OpenStreetMap"
+                        />
+                        <LMarker
+                          :lat-lng="markerPosition"
+                          draggable
+                          @dragend="handleMarkerDrag"
+                        />
+                      </LMap>
+                    </div>
+                  </client-only>
                 </div>
               </div>
 
@@ -437,44 +464,44 @@ const fetchResources = async () => {
   try {
     // Fetch references
     const referencesResponse = await fetch(
-      `http://localhost:9090/api/v1/resources?type=reference&shape_id=${route.params.id}`
+      `http://localhost:9090/api/v1/resources?resource_type=reference&shape_id=${route.params.id}`
     );
     const referencesData = await referencesResponse.json();
     location.value.properties.references = Array.isArray(referencesData)
       ? referencesData.map((ref) => ({
           id: ref.ID,
           title: ref.title || "",
-          description: ref.description || "",
+          description: ref.content || "",
           type: "reference",
         }))
       : [];
 
     // Fetch media
     const mediaResponse = await fetch(
-      `http://localhost:9090/api/v1/resources?type=media&shape_id=${route.params.id}`
+      `http://localhost:9090/api/v1/resources?resource_type=media&shape_id=${route.params.id}`
     );
     const mediaData = await mediaResponse.json();
     location.value.properties.media = Array.isArray(mediaData)
       ? mediaData.map((media) => ({
           id: media.ID,
           title: media.title || "",
-          description: media.description || "",
-          type: media.mediaType || "image",
-          url: media.url || "",
+          description: media.content || "",
+          type: "image",
+          url: media.media_url || "",
           file: null,
         }))
       : [];
 
     // Fetch comments
     const commentsResponse = await fetch(
-      `http://localhost:9090/api/v1/resources?type=comment&shape_id=${route.params.id}`
+      `http://localhost:9090/api/v1/resources?resource_type=comment&shape_id=${route.params.id}`
     );
     const commentsData = await commentsResponse.json();
     location.value.properties.comments = Array.isArray(commentsData)
       ? commentsData.map((comment) => ({
           id: comment.ID,
           title: comment.title || "",
-          description: comment.description || "",
+          description: comment.content || "",
           type: "comment",
         }))
       : [];
@@ -547,8 +574,8 @@ const saveResources = async () => {
         ID: reference.id,
         shape_id: route.params.id,
         title: reference.title,
-        description: reference.description,
-        type: "reference",
+        content: reference.description,
+        resource_type: "reference",
       };
 
       promises.push(
@@ -574,9 +601,9 @@ const saveResources = async () => {
         ID: media.id,
         shape_id: route.params.id,
         title: media.title,
-        description: media.description,
-        type: "media",
-        mediaType: media.type,
+        content: media.description,
+        resource_type: "media",
+        media_url: media.url || "",
       };
 
       formData.append("data", JSON.stringify(mediaData));
@@ -603,8 +630,8 @@ const saveResources = async () => {
         ID: comment.id,
         shape_id: route.params.id,
         title: comment.title,
-        description: comment.description,
-        type: "comment",
+        content: comment.description,
+        resource_type: "comment",
       };
 
       promises.push(
@@ -633,6 +660,7 @@ const saveResources = async () => {
 
 // Fetch data on mount if editing existing location
 onMounted(() => {
+  isClient.value = true;
   if (route.params.id !== "create") {
     fetchLocation();
     fetchResources();
@@ -665,6 +693,45 @@ const deleteResource = async (section, index) => {
     }
   }
   location.value.properties[section].splice(index, 1);
+};
+
+// Map related state
+const isClient = ref(false);
+const zoom = ref(13);
+const mapRef = ref(null);
+const mapCenter = computed(() => [
+  location.value.geometry.coordinates[1],
+  location.value.geometry.coordinates[0]
+]);
+const markerPosition = computed(() => [
+  location.value.geometry.coordinates[1],
+  location.value.geometry.coordinates[0]
+]);
+
+// Map event handlers
+const handleMapReady = () => {
+  if (route.params.id === 'create') {
+    // For new locations, try to get user's current position
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          location.value.geometry.coordinates = [
+            position.coords.longitude,
+            position.coords.latitude
+          ];
+        },
+        () => {
+          // If geolocation fails, default to a central position
+          location.value.geometry.coordinates = [0, 0];
+        }
+      );
+    }
+  }
+};
+
+const handleMarkerDrag = (event) => {
+  const { lat, lng } = event.target.getLatLng();
+  location.value.geometry.coordinates = [lng, lat];
 };
 
 definePageMeta({
