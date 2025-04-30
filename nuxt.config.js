@@ -10,6 +10,11 @@ export default defineNuxtConfig({
 
   modules: ['@nuxtjs/tailwindcss', 'nuxt-headlessui', 'nuxt-gtag', '@nuxtjs/leaflet'],
 
+  // Configure Leaflet to only load on client-side
+  leaflet: {
+    ssr: false,
+  },
+
   gtag: {
     id: 'G-M1KERXTK1H', // TODO: Add your google analytics 4 tag here
   },
@@ -55,12 +60,11 @@ export default defineNuxtConfig({
     prefix: 'Headless',
   },
 
-  css: [
-    'leaflet/dist/leaflet.css',
-  ],
+  // CSS is now loaded via the leaflet-client plugin
+  css: [],
 
   build: {
-    extend (config, ctx) {
+    extend(config, ctx) {
       config.resolve.symlinks = false;
     },
   },
@@ -85,7 +89,7 @@ export default defineNuxtConfig({
 
   compatibilityDate: '2025-01-17',
   router: {
-    extendRoutes (routes, resolve) {
+    extendRoutes(routes, resolve) {
       routes.push({
         path: '/',
         redirect: '/map',

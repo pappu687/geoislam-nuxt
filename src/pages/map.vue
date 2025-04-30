@@ -110,6 +110,7 @@
 
 <script setup>
 import { ref } from 'vue';
+// Leaflet will be imported only on client-side in the onMounted hook
 
 const zoom = ref(6);
 const center = ref([47.21322, -1.559482]);
@@ -185,8 +186,20 @@ const onGeoJsonReady = () => {
   fitMapToBounds();
 };
 
-const onMapReady = (mapInstance) => {
+const onMapReady = async (mapInstance) => {
   console.log('Map is ready');
+
+  // Import Leaflet icons configuration only when the map is ready (client-side)
+  if (typeof window !== 'undefined') {
+    try {
+      // Dynamically import the Leaflet icons configuration
+      await import('~/utils/leaflet-icons');
+      console.log('Leaflet icons configured successfully');
+    } catch (error) {
+      console.error('Failed to configure Leaflet icons:', error);
+    }
+  }
+
   fetchGeoJson();
 };
 </script>

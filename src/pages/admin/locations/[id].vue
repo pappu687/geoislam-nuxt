@@ -1,5 +1,11 @@
 <template>
   <div>
+    <!-- Toast notification -->
+    <div class="toast toast-end z-50" v-if="showToast">
+      <div class="alert" :class="toastType">
+        <span>{{ toastMessage }}</span>
+      </div>
+    </div>
     <div class="md:flex md:items-center md:justify-between">
       <div class="min-w-0 flex-1">
         <h2
@@ -74,20 +80,16 @@
                   <client-only>
                     <div v-if="isClient">
                       <LMap
-                        v-model:zoom="zoom"
-                        :center="mapCenter"
-                        @ready="handleMapReady"
-                        class="h-[400px] w-full z-0"
+                        style="height: 400px"
+                        :zoom=zoom
+                        :center="[location.geometry.coordinates[1], location.geometry.coordinates[0]]"
+                        :use-global-leaflet="false"
                       >
                         <LTileLayer
                           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                          attribution="&amp;copy; <a href=&quot;https://www.openstreetmap.org/&quot;>OpenStreetMap</a> contributors"
                           layer-type="base"
                           name="OpenStreetMap"
-                        />
-                        <LMarker
-                          :lat-lng="markerPosition"
-                          draggable
-                          @dragend="handleMarkerDrag"
                         />
                       </LMap>
                     </div>
@@ -244,15 +246,16 @@
 
                 <div>
                   <label class="block text-sm font-medium text-gray-700"
-                    >Upload File</label
+                    >Media URL</label
                   >
                   <input
-                    type="file"
-                    @change="handleFileUpload($event, index)"
-                    class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                    type="text"
+                    v-model="media.url"
+                    placeholder="https://example.com/image.jpg"
+                    class="w-full bg-white rounded border border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-base outline-none text-gray-700 py-1 px-3 leading-8 transition-colors duration-200 ease-in-out"
                   />
-                  <p v-if="media.file" class="mt-2 text-sm text-gray-500">
-                    Current file: {{ media.file.name }}
+                  <p class="mt-2 text-sm text-gray-500">
+                    Enter a URL for your media (image, video, etc.)
                   </p>
                 </div>
 
@@ -348,25 +351,49 @@
 const route = useRoute();
 const router = useRouter();
 
+// Toast notification state
+const showToast = ref(false);
+const toastMessage = ref('');
+const toastType = ref('alert-success');
+const toastTimeout = ref(null);
+
+// Function to show toast notification
+const showNotification = (message, type = 'alert-success', duration = 3000) => {
+  // Clear any existing timeout
+  if (toastTimeout.value) {
+    clearTimeout(toastTimeout.value);
+  }
+
+  // Set toast properties
+  toastMessage.value = message;
+  toastType.value = type;
+  showToast.value = true;
+
+  // Hide toast after duration
+  toastTimeout.value = setTimeout(() => {
+    showToast.value = false;
+  }, duration);
+};
+
 // Tab configuration
 const tabs = [
-  { name: "info", label: "Info" },
-  { name: "references", label: "References" },
-  { name: "media", label: "Media" },
-  { name: "comments", label: "Comments" },
+  { name: 'info', label: 'Info' },
+  { name: 'references', label: 'References' },
+  { name: 'media', label: 'Media' },
+  { name: 'comments', label: 'Comments' },
 ];
-const currentTab = ref("info");
+const currentTab = ref('info');
 
 // Initialize location data with new properties
 const location = ref({
-  type: "Feature",
+  type: 'Feature',
   geometry: {
-    type: "Point",
+    type: 'Point',
     coordinates: [0, 0],
   },
   properties: {
-    name: "",
-    description: "",
+    name: '',
+    description: '',
     references: [],
     media: [],
     comments: [],
@@ -375,20 +402,19 @@ const location = ref({
 
 // Methods for managing repeatable fields
 const addItem = (section) => {
-  if (section === "media") {
+  if (section === 'media') {
     location.value.properties[section].push({
       id: null,
-      title: "",
-      description: "",
-      type: "image",
-      file: null,
-      url: "",
+      title: '',
+      description: '',
+      type: 'image',
+      url: '',
     });
   } else {
     location.value.properties[section].push({
       id: null,
-      title: "",
-      description: "",
+      title: '',
+      description: '',
       type: section.slice(0, -1),
     });
   }
@@ -400,9 +426,9 @@ const removeItem = (section, index) => {
 
 // Existing computed property for additional properties JSON
 const propertiesJson = computed({
-  get() {
+  get () {
     const props = { ...location.value?.properties };
-    if (!props) return "{}";
+    if (!props) return '{}';
 
     delete props.name;
     delete props.description;
@@ -411,19 +437,19 @@ const propertiesJson = computed({
     delete props.comments;
     return JSON.stringify(props, null, 2);
   },
-  set(value) {
+  set (value) {
     try {
       const parsed = JSON.parse(value);
       location.value.properties = {
-        name: location.value.properties?.name || "",
-        description: location.value.properties?.description || "",
+        name: location.value.properties?.name || '',
+        description: location.value.properties?.description || '',
         references: location.value.properties?.references || [],
         media: location.value.properties?.media || [],
         comments: location.value.properties?.comments || [],
         ...parsed,
       };
     } catch (e) {
-      console.error("Invalid JSON");
+      console.error('Invalid JSON');
     }
   },
 });
@@ -432,30 +458,30 @@ const propertiesJson = computed({
 const fetchLocation = async () => {
   try {
     const response = await fetch(
-      `http://localhost:9090/api/v1/locations/${route.params.id}`
+      `http://localhost:9090/api/v1/locations/${route.params.id}`,
     );
     const data = await response.json();
 
     // Map the server response to our GeoJSON structure
     location.value = {
-      type: "Feature",
+      type: 'Feature',
       geometry: {
-        type: "Point",
+        type: 'Point',
         coordinates: [data.longitude || 0, data.latitude || 0],
       },
       properties: {
-        name: data.name || "",
-        description: "", // Server doesn't provide this yet
-        verses: data.verses || "",
-        prophet: data.prophet || "",
-        timeline: data.timeline || "",
+        name: data.name || '',
+        description: data.description || '',
+        verses: data.verses || '',
+        prophet: data.prophet || '',
+        timeline: data.timeline || '',
         references: location.value.properties.references || [],
         media: location.value.properties.media || [],
         comments: location.value.properties.comments || [],
       },
     };
   } catch (error) {
-    console.error("Error fetching location:", error);
+    console.error('Error fetching location:', error);
   }
 };
 
@@ -464,49 +490,48 @@ const fetchResources = async () => {
   try {
     // Fetch references
     const referencesResponse = await fetch(
-      `http://localhost:9090/api/v1/resources?resource_type=reference&shape_id=${route.params.id}`
+      `http://localhost:9090/api/v1/resources?resource_type=reference&shape_id=${route.params.id}`,
     );
     const referencesData = await referencesResponse.json();
     location.value.properties.references = Array.isArray(referencesData)
       ? referencesData.map((ref) => ({
-          id: ref.ID,
-          title: ref.title || "",
-          description: ref.content || "",
-          type: "reference",
-        }))
+        id: ref.ID,
+        title: ref.title || '',
+        description: ref.content || '',
+        type: 'reference',
+      }))
       : [];
 
     // Fetch media
     const mediaResponse = await fetch(
-      `http://localhost:9090/api/v1/resources?resource_type=media&shape_id=${route.params.id}`
+      `http://localhost:9090/api/v1/resources?resource_type=media&shape_id=${route.params.id}`,
     );
     const mediaData = await mediaResponse.json();
     location.value.properties.media = Array.isArray(mediaData)
       ? mediaData.map((media) => ({
-          id: media.ID,
-          title: media.title || "",
-          description: media.content || "",
-          type: "image",
-          url: media.media_url || "",
-          file: null,
-        }))
+        id: media.ID,
+        title: media.title || '',
+        description: media.content || '',
+        type: 'image',
+        url: media.media_url || '',
+      }))
       : [];
 
     // Fetch comments
     const commentsResponse = await fetch(
-      `http://localhost:9090/api/v1/resources?resource_type=comment&shape_id=${route.params.id}`
+      `http://localhost:9090/api/v1/resources?resource_type=comment&shape_id=${route.params.id}`,
     );
     const commentsData = await commentsResponse.json();
     location.value.properties.comments = Array.isArray(commentsData)
       ? commentsData.map((comment) => ({
-          id: comment.ID,
-          title: comment.title || "",
-          description: comment.content || "",
-          type: "comment",
-        }))
+        id: comment.ID,
+        title: comment.title || '',
+        description: comment.content || '',
+        type: 'comment',
+      }))
       : [];
   } catch (error) {
-    console.error("Error fetching resources:", error);
+    console.error('Error fetching resources:', error);
     // Initialize empty arrays if fetch fails
     location.value.properties.references = [];
     location.value.properties.media = [];
@@ -523,9 +548,22 @@ const handleSubmit = async () => {
     // Then save all resources
     await saveResources();
 
-    router.push("/admin/locations");
+    // Show success notification
+    const isNewLocation = route.params.id === 'create';
+    const successMessage = isNewLocation
+      ? 'Location added successfully!'
+      : 'Location updated successfully!';
+
+    showNotification(successMessage, 'alert-success');
+
+    // Redirect after a short delay to allow the user to see the notification
+    setTimeout(() => {
+      router.push('/admin/locations');
+    }, 1500);
   } catch (error) {
-    console.error("Error saving data:", error);
+    console.error('Error saving data:', error);
+    // Show error notification
+    showNotification('Error saving location. Please try again.', 'alert-error');
   }
 };
 
@@ -535,29 +573,34 @@ const saveLocation = async () => {
     const serverData = {
       ID: route.params.id,
       name: location.value.properties.name,
+      description: location.value.properties.description || '',
       latitude: location.value.geometry.coordinates[1],
       longitude: location.value.geometry.coordinates[0],
-      verses: location.value.properties.verses || "",
-      prophet: location.value.properties.prophet || "",
-      timeline: location.value.properties.timeline || "",
+      verses: location.value.properties.verses || '',
+      prophet: location.value.properties.prophet || '',
+      timeline: location.value.properties.timeline || '',
     };
 
     const locationResponse = await fetch(
       `http://localhost:9090/api/v1/locations/${route.params.id}`,
       {
-        method: "PUT",
+        method: 'PUT',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(serverData),
-      }
+      },
     );
 
     if (!locationResponse.ok) {
-      throw new Error("Failed to save location");
+      const errorData = await locationResponse.json();
+      const errorMessage = errorData.error || 'Failed to save location';
+      showNotification(errorMessage, 'alert-error');
+      throw new Error(errorMessage);
     }
   } catch (error) {
-    console.error("Error saving location:", error);
+    console.error('Error saving location:', error);
+    showNotification('Error saving location data', 'alert-error');
     throw error;
   }
 };
@@ -575,52 +618,51 @@ const saveResources = async () => {
         shape_id: route.params.id,
         title: reference.title,
         content: reference.description,
-        resource_type: "reference",
+        resource_type: 'reference',
       };
 
       promises.push(
         fetch(
           `http://localhost:9090/api/v1/resources${
-            reference.id ? `/${reference.id}` : ""
+            reference.id ? `/${reference.id}` : ''
           }`,
           {
-            method: reference.id ? "PUT" : "POST",
+            method: reference.id ? 'PUT' : 'POST',
             headers: {
-              "Content-Type": "application/json",
+              'Content-Type': 'application/json',
             },
             body: JSON.stringify(referenceData),
-          }
-        )
+          },
+        ),
       );
     }
 
     // Handle media
     for (const media of location.value.properties.media) {
-      const formData = new FormData();
+      // For now, handle media the same way as references and comments
+      // We'll use the URL field directly instead of uploading files
       const mediaData = {
         ID: media.id,
         shape_id: route.params.id,
         title: media.title,
         content: media.description,
-        resource_type: "media",
-        media_url: media.url || "",
+        resource_type: 'media',
+        media_url: media.url || '',
       };
-
-      formData.append("data", JSON.stringify(mediaData));
-      if (media.file) {
-        formData.append("file", media.file);
-      }
 
       promises.push(
         fetch(
           `http://localhost:9090/api/v1/resources${
-            media.id ? `/${media.id}` : ""
+            media.id ? `/${media.id}` : ''
           }`,
           {
-            method: media.id ? "PUT" : "POST",
-            body: formData,
-          }
-        )
+            method: media.id ? 'PUT' : 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(mediaData),
+          },
+        ),
       );
     }
 
@@ -631,52 +673,53 @@ const saveResources = async () => {
         shape_id: route.params.id,
         title: comment.title,
         content: comment.description,
-        resource_type: "comment",
+        resource_type: 'comment',
       };
 
       promises.push(
         fetch(
           `http://localhost:9090/api/v1/resources${
-            comment.id ? `/${comment.id}` : ""
+            comment.id ? `/${comment.id}` : ''
           }`,
           {
-            method: comment.id ? "PUT" : "POST",
+            method: comment.id ? 'PUT' : 'POST',
             headers: {
-              "Content-Type": "application/json",
+              'Content-Type': 'application/json',
             },
             body: JSON.stringify(commentData),
-          }
-        )
+          },
+        ),
       );
     }
 
     // Wait for all resource saves to complete
     await Promise.all(promises);
   } catch (error) {
-    console.error("Error saving resources:", error);
+    console.error('Error saving resources:', error);
+    showNotification('Error saving resources', 'alert-error');
     throw error;
   }
 };
 
 // Fetch data on mount if editing existing location
 onMounted(() => {
+  // Set isClient to true to ensure the map is displayed
   isClient.value = true;
-  if (route.params.id !== "create") {
+
+  if (route.params.id !== 'create') {
     fetchLocation();
     fetchResources();
+  } else {
+    // For new locations, initialize with default coordinates
+    // This will be overridden by geolocation if available
+    location.value.geometry.coordinates = [0, 0];
   }
 });
 
-// Handle file upload
+// We're no longer using file uploads, but keeping this function for future implementation
 const handleFileUpload = (event, index) => {
-  const file = event.target.files[0];
-  if (file) {
-    location.value.properties.media[index].file = file;
-    // You might want to generate a preview URL for images
-    if (file.type.startsWith("image/")) {
-      location.value.properties.media[index].url = URL.createObjectURL(file);
-    }
-  }
+  // This function is no longer used, but kept for future implementation
+  console.log('File upload functionality is disabled. Please use the URL field instead.');
 };
 
 // Delete resource
@@ -685,10 +728,10 @@ const deleteResource = async (section, index) => {
   if (resource.id) {
     try {
       await fetch(`http://localhost:9090/api/v1/resources/${resource.id}`, {
-        method: "DELETE",
+        method: 'DELETE',
       });
     } catch (error) {
-      console.error("Error deleting resource:", error);
+      console.error('Error deleting resource:', error);
       return;
     }
   }
@@ -701,40 +744,63 @@ const zoom = ref(13);
 const mapRef = ref(null);
 const mapCenter = computed(() => [
   location.value.geometry.coordinates[1],
-  location.value.geometry.coordinates[0]
+  location.value.geometry.coordinates[0],
 ]);
 const markerPosition = computed(() => [
   location.value.geometry.coordinates[1],
-  location.value.geometry.coordinates[0]
+  location.value.geometry.coordinates[0],
 ]);
 
 // Map event handlers
-const handleMapReady = () => {
+const handleMapReady = async () => {
+  console.log('Map is ready');
+
+  // Import Leaflet icons configuration only when the map is ready (client-side)
+  if (typeof window !== 'undefined') {
+    try {
+      // Dynamically import the Leaflet icons configuration
+      await import('~/utils/leaflet-icons');
+      console.log('Leaflet icons configured successfully');
+    } catch (error) {
+      console.error('Failed to configure Leaflet icons:', error);
+    }
+  }
+
   if (route.params.id === 'create') {
     // For new locations, try to get user's current position
     if (navigator.geolocation) {
+      console.log('Attempting to get user location...');
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          console.log(`Got user location: ${position.coords.latitude}, ${position.coords.longitude}`);
           location.value.geometry.coordinates = [
             position.coords.longitude,
-            position.coords.latitude
+            position.coords.latitude,
           ];
         },
-        () => {
+        (error) => {
+          console.error('Geolocation error:', error);
           // If geolocation fails, default to a central position
           location.value.geometry.coordinates = [0, 0];
-        }
+        },
       );
+    } else {
+      console.log('Geolocation not available');
+      location.value.geometry.coordinates = [0, 0];
     }
+  } else {
+    console.log(`Using existing coordinates: ${location.value.geometry.coordinates}`);
   }
 };
 
 const handleMarkerDrag = (event) => {
   const { lat, lng } = event.target.getLatLng();
+  // Update the coordinates in the location object
   location.value.geometry.coordinates = [lng, lat];
+  console.log(`Marker dragged to: ${lat}, ${lng}`);
 };
 
 definePageMeta({
-  layout: "admin",
+  layout: 'admin',
 });
 </script>
