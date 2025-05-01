@@ -75,7 +75,7 @@
       </div>
 
       <!-- Tab Content -->
-      <div class="p-4 overflow-y-auto">
+      <div class="p-4 overflow-y-auto h-[calc(100%-100px)]">
         <!-- Info Tab -->
         <div v-if="currentTab === 'info' && selectedFeature" class="space-y-4">
           <div v-for="(value, key) in selectedFeature.properties" :key="key" class="border-b pb-2">
@@ -86,17 +86,55 @@
 
         <!-- References Tab -->
         <div v-if="currentTab === 'references'" class="space-y-4">
-          <p class="text-gray-500">References content goes here</p>
+          <div v-if="selectedFeature?.properties.references?.length" class="space-y-4">
+            <div v-for="(reference, index) in selectedFeature.properties.references" :key="index" class="border-b pb-3">
+              <h3 class="font-medium">{{ reference.title }}</h3>
+              <p class="text-sm text-gray-600">{{ reference.content }}</p>
+            </div>
+          </div>
+          <p v-else class="text-gray-500">No references available</p>
         </div>
 
         <!-- Media Tab -->
         <div v-if="currentTab === 'media'" class="space-y-4">
-          <p class="text-gray-500">Media content goes here</p>
+          <div v-if="selectedFeature?.properties.media?.length" class="space-y-4">
+            <div v-for="(item, index) in selectedFeature.properties.media" :key="index" class="border-b pb-3">
+              <h3 class="font-medium">{{ item.title }}</h3>
+              <p class="text-sm text-gray-600 mb-2">{{ item.content }}</p>
+
+              <!-- YouTube Embed -->
+              <div v-if="isYouTubeUrl(item.media_url)" class="aspect-video w-full">
+                <iframe
+                  class="w-full h-full rounded-lg"
+                  :src="getYouTubeEmbedUrl(item.media_url)"
+                  title="YouTube video player"
+                  frameborder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowfullscreen>
+                </iframe>
+              </div>
+
+              <!-- Regular Image -->
+              <img
+                v-else-if="item.media_url"
+                :src="item.media_url"
+                alt="Media"
+                class="w-full rounded-lg"
+              >
+            </div>
+          </div>
+          <p v-else class="text-gray-500">No media available</p>
         </div>
 
         <!-- Comments Tab -->
         <div v-if="currentTab === 'comments'" class="space-y-4">
-          <p class="text-gray-500">Comments content goes here</p>
+          <div v-if="selectedFeature?.properties.comments?.length" class="space-y-4">
+            <div v-for="(comment, index) in selectedFeature.properties.comments" :key="index" class="border-b pb-3">
+              <h3 class="font-medium">{{ comment.title }}</h3>
+              <p class="text-sm text-gray-600">{{ comment.content }}</p>
+            </div>
+          </div>
+          <p v-else class="text-gray-500">No comments available</p>
         </div>
 
         <!-- No Feature Selected Message -->
@@ -139,9 +177,14 @@ const geoJsonOptions = {
     fillOpacity: 0.7,
   }),
   onEachFeature: (feature, layer) => {
-    layer.on('click', (e) => {
-      selectedFeature.value = feature;
+    layer.on('click', async (e) => {
+      // Show loading state
+      selectedFeature.value = { properties: { name: 'Loading...' } };
       isSidebarOpen.value = true;
+
+      // Fetch detailed data for this specific feature
+      await fetchFeatureDetails(feature.properties.id);
+
       e.originalEvent.stopPropagation();
     });
   },
@@ -201,6 +244,84 @@ const onMapReady = async (mapInstance) => {
   }
 
   fetchGeoJson();
+};
+
+// Add a new function to fetch feature details
+const fetchFeatureDetails = async (featureId) => {
+  try {
+    // Fetch the location details
+    const locationResponse = await fetch(`http://localhost:9090/api/v1/locations/${featureId}`);
+    const locationData = await locationResponse.json();
+
+    // Create a base feature object
+    const detailedFeature = {
+      type: 'Feature',
+      geometry: locationData.geometry || { type: 'Point', coordinates: [locationData.longitude, locationData.latitude] },
+      properties: {
+        ...locationData,
+        references: [],
+        media: [],
+        comments: [],
+      },
+    };
+
+    // Fetch references
+    const referencesResponse = await fetch(
+      `http://localhost:9090/api/v1/resources?resource_type=reference&shape_id=${featureId}`,
+    );
+    detailedFeature.properties.references = await referencesResponse.json() || [];
+
+    // Fetch media
+    const mediaResponse = await fetch(
+      `http://localhost:9090/api/v1/resources?resource_type=media&shape_id=${featureId}`,
+    );
+    detailedFeature.properties.media = await mediaResponse.json() || [];
+
+    // Fetch comments
+    const commentsResponse = await fetch(
+      `http://localhost:9090/api/v1/resources?resource_type=comment&shape_id=${featureId}`,
+    );
+    detailedFeature.properties.comments = await commentsResponse.json() || [];
+
+    // Update the selected feature with all the data
+    selectedFeature.value = detailedFeature;
+  } catch (error) {
+    console.error('Error fetching feature details:', error);
+    selectedFeature.value = { properties: { name: 'Error loading data', error: error.message } };
+  }
+};
+
+// Helper function to check if a URL is a YouTube URL
+const isYouTubeUrl = (url) => {
+  if (!url) return false;
+
+  // Match various YouTube URL formats
+  const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/.+/;
+  return youtubeRegex.test(url);
+};
+
+// Helper function to convert YouTube URL to embed URL
+const getYouTubeEmbedUrl = (url) => {
+  if (!url) return '';
+
+  // Extract video ID from various YouTube URL formats
+  let videoId = '';
+
+  // youtu.be format
+  if (url.includes('youtu.be')) {
+    videoId = url.split('/').pop().split('?')[0];
+  }
+  // youtube.com/watch?v= format
+  else if (url.includes('watch?v=')) {
+    videoId = new URL(url).searchParams.get('v');
+  }
+  // youtube.com/embed/ format
+  else if (url.includes('/embed/')) {
+    videoId = url.split('/embed/')[1].split('?')[0];
+  }
+
+  // Return embed URL with additional parameters for better embedding
+  return `https://www.youtube.com/embed/${videoId}?rel=0`;
 };
 </script>
 
